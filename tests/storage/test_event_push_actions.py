@@ -121,6 +121,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
                     "m.read",
                     user_id=user_id,
                     event_ids=[event_id],
+                    thread_id=None,
                     data={},
                 )
             )
@@ -256,14 +257,16 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
             else:
                 self.assertEqual(thread_counts, {})
 
-        def _inject_actions(highlight: bool = False, thread_id: Optional[str] = None) -> str:
+        def _inject_actions(
+            highlight: bool = False, thread_id: Optional[str] = None
+        ) -> str:
             content = {"msgtype": "m.text", "body": user_id if highlight else ""}
             if thread_id:
                 content["m.relates_to"] = {
                     "rel_type": "m.thread",
                     "event_id": thread_id,
                 }
-            
+
             result = self.helper.send_event(
                 room_id,
                 type="m.room.message",
@@ -284,6 +287,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
                     "m.read",
                     user_id=user_id,
                     event_ids=[event_id],
+                    thread_id=None,
                     data={},
                 )
             )
