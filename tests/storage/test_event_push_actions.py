@@ -70,7 +70,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         def _assert_counts(
             noitf_count: int, unread_count: int, highlight_count: int
         ) -> None:
-            counts = self.get_success(
+            counts, thread_counts = self.get_success(
                 self.store.db_pool.runInteraction(
                     "get-unread-counts",
                     self.store._get_unread_counts_by_receipt_txn,
@@ -86,6 +86,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
                     highlight_count=highlight_count,
                 ),
             )
+            self.assertEqual(thread_counts, {})
 
         def _create_event(highlight: bool = False) -> str:
             result = self.helper.send_event(
