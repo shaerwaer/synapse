@@ -66,6 +66,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         self.helper.join(room_id, other_id, tok=other_token)
 
         last_event_id: str
+        desc = ["A"]
 
         def _assert_counts(
             noitf_count: int, unread_count: int, highlight_count: int
@@ -95,12 +96,21 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
                 content={"msgtype": "m.text", "body": user_id if highlight else "msg"},
                 tok=other_token,
             )
+
+            self.get_success(
+                self.store.db_pool.runInteraction("foo", f, "_inject_actions")
+            )
+
             nonlocal last_event_id
             last_event_id = result["event_id"]
             return last_event_id
 
         def _rotate() -> None:
             self.get_success(self.store._rotate_notifs())
+
+            self.get_success(
+                self.store.db_pool.runInteraction("foo", f, "_rotate (notifs)")
+            )
 
         def _mark_read(event_id: str) -> None:
             self.get_success(
@@ -112,6 +122,28 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
                     data={},
                 )
             )
+
+            self.get_success(self.store.db_pool.runInteraction("foo", f, "_mark_read"))
+
+        def f(txn, func):
+            print(f"\n{desc[0]}: {func}")
+            txn.execute("SELECT * FROM event_push_summary")
+            print(f"event_push_summary: {[x[:6] for x in txn.fetchall()]}")
+
+            txn.execute("SELECT * FROM event_push_actions")
+            print(f"event_push_actions: {[x[:10] for x in txn.fetchall()]}")
+
+            txn.execute("SELECT * FROM event_push_actions_staging")
+            print(f"event_push_actions_staging: {[x[:6] for x in txn.fetchall()]}")
+
+            txn.execute("SELECT * FROM event_push_summary_last_receipt_stream_id")
+            print(f"event_push_summary_last_receipt_stream_id: {txn.fetchall()}")
+
+            txn.execute("SELECT * FROM event_push_summary_stream_ordering")
+            print(f"event_push_summary_stream_ordering: {txn.fetchall()}")
+
+            desc[0] = chr(ord(desc[0]) + 1)
+            print()
 
         _assert_counts(0, 0, 0)
         _create_event()
@@ -132,6 +164,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         _assert_counts(0, 0, 0)
 
         _create_event()
+        _assert_counts(1, 1, 0)
         _rotate()
         _assert_counts(1, 1, 0)
 
