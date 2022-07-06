@@ -280,14 +280,14 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         def _rotate() -> None:
             self.get_success(self.store._rotate_notifs())
 
-        def _mark_read(event_id: str) -> None:
+        def _mark_read(event_id: str, thread_id: Optional[str] = None) -> None:
             self.get_success(
                 self.store.insert_receipt(
                     room_id,
                     "m.read",
                     user_id=user_id,
                     event_ids=[event_id],
-                    thread_id=None,
+                    thread_id=thread_id,
                     data={},
                 )
             )
@@ -316,9 +316,12 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         _inject_actions()
         _inject_actions(thread_id=thread_id)
         _mark_read(event_id)
+        _assert_counts(1, 0, 0, 3, 0, 0)
+        _mark_read(event_id, thread_id)
         _assert_counts(1, 0, 0, 1, 0, 0)
 
         _mark_read(last_event_id)
+        _mark_read(last_event_id, thread_id)
         _assert_counts(0, 0, 0, 0, 0, 0)
 
         _inject_actions()
@@ -331,6 +334,7 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         _assert_counts(1, 0, 0, 1, 0, 0)
 
         _mark_read(last_event_id)
+        _mark_read(last_event_id, thread_id)
         _assert_counts(0, 0, 0, 0, 0, 0)
 
         _inject_actions(True)
@@ -347,23 +351,28 @@ class EventPushActionsStoreTestCase(HomeserverTestCase):
         # works.
         _inject_actions()
         _rotate()
-        _assert_counts(2, 0, 1, 1, 1, 1)
+        _assert_counts(2, 1, 1, 1, 1, 1)
 
         _inject_actions(thread_id=thread_id)
         _rotate()
-        _assert_counts(2, 0, 1, 2, 0, 1)
+        _assert_counts(2, 1, 1, 2, 1, 1)
 
         # Check that sending read receipts at different points results in the
         # right counts.
         _mark_read(event_id)
+        _assert_counts(1, 0, 0, 2, 1, 1)
+        _mark_read(event_id, thread_id)
         _assert_counts(1, 0, 0, 1, 0, 0)
         _mark_read(last_event_id)
+        _assert_counts(0, 0, 0, 1, 0, 0)
+        _mark_read(last_event_id, thread_id)
         _assert_counts(0, 0, 0, 0, 0, 0)
 
         _inject_actions(True)
         _inject_actions(True, thread_id)
         _assert_counts(1, 1, 1, 1, 1, 1)
         _mark_read(last_event_id)
+        _mark_read(last_event_id, thread_id)
         _assert_counts(0, 0, 0, 0, 0, 0)
         _rotate()
         _assert_counts(0, 0, 0, 0, 0, 0)
