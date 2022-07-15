@@ -1061,6 +1061,7 @@ class RoomCreationHandler:
 
         depth = 1
         last_sent_event_id: Optional[str] = None
+        last_sent_stream_id: int = 0
 
         def create(etype: str, content: JsonDict, **kwargs: Any) -> JsonDict:
             e = {"type": etype, "content": content}
@@ -1070,7 +1071,8 @@ class RoomCreationHandler:
 
             return e
 
-        async def send(etype: str, content: JsonDict, **kwargs: Any) -> int:
+        async def send(etype: str, content: JsonDict, **kwargs: Any) -> None:
+            nonlocal last_sent_stream_id
             nonlocal last_sent_event_id
             nonlocal depth
 
@@ -1080,7 +1082,7 @@ class RoomCreationHandler:
             # allow the room creation to complete.
             (
                 sent_event,
-                last_stream_id,
+                last_sent_stream_id,
             ) = await self.event_creation_handler.create_and_send_nonmember_event(
                 creator,
                 event,
@@ -1094,8 +1096,6 @@ class RoomCreationHandler:
 
             last_sent_event_id = sent_event.event_id
             depth += 1
-
-            return last_stream_id
 
         try:
             room_preset_config = self._presets_dict[room_preset_identifier]
@@ -1216,9 +1216,7 @@ class RoomCreationHandler:
 
         # Send each event in order of its insertion into the dictionary
         for (event_type, state_key), content in state_to_send.items():
-            last_sent_stream_id = await send(
-                etype=event_type, state_key=state_key, content=content
-            )
+            await send(etype=event_type, state_key=state_key, content=content)
 
         return last_sent_stream_id, last_sent_event_id, depth
 
