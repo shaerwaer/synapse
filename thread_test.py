@@ -137,12 +137,13 @@ def main():
         event_ids.append(event_id)
         return event_id
 
-    root_message_id = _send_and_append("Root")
-    for msg in range(3):
-        _send_and_append(f"Message {msg}")
-    for msg in range(3):
-        _send_and_append(f"Thread Message {msg}", root_message_id)
-    sleep(1)
+    for msg in range(5):
+        root_message_id = _send_and_append(f"Message {msg}")
+    for msg in range(10):
+        if msg % 2:
+            _send_and_append(f"More message {msg}")
+        else:
+            _send_and_append(f"Thread Message {msg}", root_message_id)
 
     # User 2 sends a read receipt.
     print("@second reads main timeline")
@@ -158,7 +159,7 @@ def main():
     # User 1 sends a read receipt.
     print("@test reads main timeline")
     result = requests.post(
-        f"{HOMESERVER}/_matrix/client/v3/rooms/{room_id}/receipt/m.read/{event_ids[3]}",
+        f"{HOMESERVER}/_matrix/client/v3/rooms/{room_id}/receipt/m.read/{event_ids[-5]}",
         headers=USER_1_HEADERS,
         json={},
     )
@@ -169,7 +170,7 @@ def main():
     # User 1 sends another read receipt.
     print("@test reads thread")
     result = requests.post(
-        f"{HOMESERVER}/_matrix/client/v3/rooms/{room_id}/receipt/m.read/{event_ids[-1]}/{root_message_id}",
+        f"{HOMESERVER}/_matrix/client/v3/rooms/{room_id}/receipt/m.read/{event_ids[-4]}/{root_message_id}",
         headers=USER_1_HEADERS,
         json={},
     )
