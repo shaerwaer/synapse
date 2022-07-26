@@ -226,6 +226,40 @@ class AccountDataWorkerStore(PushRulesWorkerStore, CacheInvalidationWorkerStore)
             "get_account_data_for_room", get_account_data_for_room_txn
         )
 
+    @cached(num_args=2, tree=True)
+    async def get_account_data_for_room_and_type_any_user(
+        self, room_id: str, account_data_type: str
+    ) -> Dict[str, JsonDict]:
+        """Get all the client account_data for a user for a room.
+
+        Args:
+            user_id: The user to get the account_data for.
+            room_id: The room to get the account_data for.
+        Returns:
+            A dict of the room account_data
+        """
+
+        def get_account_data_for_room_and_type_any_user_txn(
+            txn: LoggingTransaction,
+        ) -> Dict[str, JsonDict]:
+            rows = self.db_pool.simple_select_list_txn(
+                txn,
+                "room_account_data",
+                {
+                    "room_id": room_id,
+                    "account_data_type": account_data_type,
+                },
+                ["user_id", "content"],
+            )
+
+            return {
+                row["user_id"]: db_to_json(row["content"]) for row in rows
+            }
+
+        return await self.db_pool.runInteraction(
+            "get_account_data_for_room_and_type_any_user_txn", get_account_data_for_room_and_type_any_user_txn
+        )
+
     @cached(num_args=3, max_entries=5000, tree=True)
     async def get_account_data_for_room_and_type(
         self, user_id: str, room_id: str, account_data_type: str

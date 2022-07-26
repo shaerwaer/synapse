@@ -1657,6 +1657,30 @@ class EventsWorkerStore(SQLBaseStore):
 
         return int(res["topological_ordering"]), int(res["stream_ordering"])
 
+    async def get_events_orderings (
+        self, event_ids: [str]
+    ) -> Dict[str, Tuple[int, int]]:
+
+        def get_events_orderings_txn(
+            txn: LoggingTransaction,
+        ) -> Dict[str, Tuple[int, int]]:
+            events = self.db_pool.simple_select_many_txn(
+                txn,
+                table="events",
+                column="event_id",
+                iterable=event_ids,
+                keyvalues={},
+                retcols=["event_id", "topological_ordering", "stream_ordering"],
+            )
+
+            return {
+                row["event_id"]: (int(row["topological_ordering"]), int(row["stream_ordering"])) for row in events
+            }
+
+        return await self.db_pool.runInteraction(
+            desc="get_events_orderings_txn", func=get_events_orderings_txn
+        )
+
     async def get_next_event_to_expire(self) -> Optional[Tuple[str, int]]:
         """Retrieve the entry with the lowest expiry timestamp in the event_expiry
         table, or None if there's no more event to expire.

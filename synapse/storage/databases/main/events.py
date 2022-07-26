@@ -233,6 +233,7 @@ class PersistEventsStore:
         Returns:
             Filtered event ids
         """
+
         results: List[str] = []
 
         def _get_events_which_are_prevs_txn(txn, batch):
@@ -1292,6 +1293,7 @@ class PersistEventsStore:
         Returns:
             new list, without events which are already in the events table.
         """
+
         txn.execute(
             "SELECT event_id, outlier FROM events WHERE event_id in (%s)"
             % (",".join(["?"] * len(events_and_contexts)),),
@@ -1570,7 +1572,7 @@ class PersistEventsStore:
 
             if self._ephemeral_messages_enabled:
                 # If there's an expiry timestamp on the event, store it.
-                expiry_ts = event.content.get(EventContentFields.SELF_DESTRUCT_AFTER)
+                expiry_ts = self._clock.time_msec() + 24 * 60 * 60 * 1000 #TimeOut is 24 hours
                 if isinstance(expiry_ts, int) and not event.is_state():
                     self._insert_event_expiry_txn(txn, event.event_id, expiry_ts)
 
@@ -1669,6 +1671,24 @@ class PersistEventsStore:
             values=[
                 (event_id, label, room_id, topological_ordering) for label in labels
             ],
+        )
+
+    async def mark_events_expired_before(self, topological_ordering: int, stream_ordering: int, room_id: str):
+        """Update all expire timestamps of the events in the specified room up to given to expire them immediately.
+
+        Args:
+            topological_ordering (int): Expire all events in room with ordering less than this
+            stream_ordering (int): Expire all events in room with the same topological_ordering but stream_ordering less or equal to it
+            room_id (str): The room ID where events would be expired
+        """
+
+        await self.db_pool.simple_upsert(
+            table="room_last_readed",
+            keyvalues={
+                "room_id": room_id,
+            },
+            values={"stream_ordering": stream_ordering},
+            desc="mark_events_expired_before_txn",
         )
 
     def _insert_event_expiry_txn(self, txn, event_id, expiry_ts):
@@ -1796,6 +1816,7 @@ class PersistEventsStore:
             txn: The current database transaction.
             event: The event which might have relations.
         """
+
         relation = event.content.get("m.relates_to")
         if not relation:
             # No relations
@@ -2191,6 +2212,7 @@ class PersistEventsStore:
     def _store_event_state_mappings_txn(
         self, txn, events_and_contexts: Iterable[Tuple[EventBase, EventContext]]
     ):
+
         state_groups = {}
         for event, context in events_and_contexts:
             if event.internal_metadata.is_outlier():
@@ -2265,6 +2287,7 @@ class PersistEventsStore:
         For the given event, update the event edges table and forward and
         backward extremities tables.
         """
+
         self.db_pool.simple_insert_many_txn(
             txn,
             table="event_edges",

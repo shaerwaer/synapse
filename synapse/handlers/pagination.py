@@ -242,6 +242,17 @@ class PaginationHandler:
                 retention_policy["max_lifetime"] or self._retention_default_max_lifetime
             )
 
+            # Check if we should purge the whole room
+            if "last_event_ts" in retention_policy:
+                last_event_age = self.clock.time_msec() - retention_policy["last_event_ts"]
+
+                # room with last events older than 4 hours would be purged
+                room_timeout = 4 * 60 * 60 * 1000
+
+                if last_event_age > room_timeout:
+                    await self.purge_room(room_id, True)
+                    continue
+
             # Cap the effective max_lifetime to be within the range allowed in the
             # config.
             # We do this in two steps:
@@ -266,6 +277,10 @@ class PaginationHandler:
 
             stream_ordering = await self.store.find_first_stream_ordering_after_ts(ts)
 
+            if "last_readed" in retention_policy:
+                if retention_policy["last_readed"] > stream_ordering:
+                    stream_ordering = retention_policy["last_readed"]
+
             r = await self.store.get_room_event_before_stream_ordering(
                 room_id,
                 stream_ordering,
@@ -287,7 +302,7 @@ class PaginationHandler:
             self._purges_by_id[purge_id] = PurgeStatus()
 
             logger.info(
-                "Starting purging events in room %s (purge_id %s)" % (room_id, purge_id)
+                "Starting purging events in room %s (purge_id %s); token: %s" % (room_id, purge_id, token)
             )
 
             # We want to purge everything, including local events, and to run the purge in

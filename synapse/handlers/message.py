@@ -301,8 +301,8 @@ class MessageHandler:
             event: The event to schedule the expiry of.
         """
 
-        expiry_ts = event.content.get(EventContentFields.SELF_DESTRUCT_AFTER)
-        if not isinstance(expiry_ts, int) or event.is_state():
+        expiry_ts = self.clock.time_msec() + 24 * 60 * 60 * 1000 #TimeOut is 24 hours
+        if event.is_state():
             return
 
         # _schedule_expiry_for_event won't actually schedule anything if there's already

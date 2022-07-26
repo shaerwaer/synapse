@@ -70,7 +70,7 @@ class ReadMarkerRestServlet(RestServlet):
 
         read_marker_event_id = body.get("m.fully_read", None)
         if read_marker_event_id:
-            await self.read_marker_handler.received_client_read_marker(
+            await self.read_marker_handler.received_client_read_marker_and_purge_history(
                 room_id,
                 user_id=requester.user.to_string(),
                 event_id=read_marker_event_id,
