@@ -249,6 +249,7 @@ class ServerConfig(Config):
     section = "server"
 
     def read_config(self, config: JsonDict, **kwargs: Any) -> None:
+
         self.server_name = config["server_name"]
         self.server_context = config.get("server_context", None)
 

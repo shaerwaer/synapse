@@ -1056,7 +1056,7 @@ class RoomWorkerStore(CacheInvalidationWorkerStore):
                 # If required, do a second query that retrieves all of the rooms we know
                 # of so we can handle rooms with no retention policy.
                 sql = """
-                    SELECT room_id, max(origin_server_ts), lr.stream_ordering
+                    SELECT room_id, max(origin_server_ts), max(lr.stream_ordering)
                     FROM events INNER JOIN room_last_readed lr USING (room_id)
                     GROUP BY room_id
                 """
@@ -1073,7 +1073,7 @@ class RoomWorkerStore(CacheInvalidationWorkerStore):
                             "min_lifetime": None,
                             "max_lifetime": None,
                             "last_event_ts": row["max(origin_server_ts)"],
-                            "last_readed": row["stream_ordering"],
+                            "last_readed": row["max(lr.stream_ordering)"],
                         }
 
             return rooms_dict
