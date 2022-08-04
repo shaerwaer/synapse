@@ -1013,6 +1013,7 @@ class RoomWorkerStore(CacheInvalidationWorkerStore):
             policy associated with this room ID. The keys for this nested dict are
             "min_lifetime" (int|None), and "max_lifetime" (int|None).
         """
+        logger.debug("[purge]get_rooms_for_retention_period_in_range invoked")
 
         def get_rooms_for_retention_period_in_range_txn(
             txn: LoggingTransaction,
@@ -1056,14 +1057,17 @@ class RoomWorkerStore(CacheInvalidationWorkerStore):
                 # If required, do a second query that retrieves all of the rooms we know
                 # of so we can handle rooms with no retention policy.
                 sql = """
-                    SELECT room_id, max(origin_server_ts), max(lr.stream_ordering)
-                    FROM events INNER JOIN room_last_readed lr USING (room_id)
+                    SELECT room_id,
+                    max(e.origin_server_ts) as server_ts, max(lr.stream_ordering) as ordering
+                    FROM events e INNER JOIN room_last_readed lr USING (room_id)
                     GROUP BY room_id
                 """
 
                 txn.execute(sql)
 
                 rows = self.db_pool.cursor_to_dict(txn)
+
+                logger.debug("[purge]get_rooms_for_retention_period_in_range rooms_dict: %s", rooms_dict)
 
                 # If a room isn't already in the dict (i.e. it doesn't have a retention
                 # policy in its state), add it with a null policy.
@@ -1072,8 +1076,8 @@ class RoomWorkerStore(CacheInvalidationWorkerStore):
                         rooms_dict[row["room_id"]] = {
                             "min_lifetime": None,
                             "max_lifetime": None,
-                            "last_event_ts": row["max(origin_server_ts)"],
-                            "last_readed": row["max(lr.stream_ordering)"],
+                            "last_event_ts": row["server_ts"],
+                            "last_readed": row["ordering"],
                         }
 
             return rooms_dict
