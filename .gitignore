@@ -62,3 +62,4 @@ book/
 /complement-*
 /master.tar.gz
 Users:kurnosovaleksey:synapse:homeserver.yaml.fileloc
+log_remote.config

@@ -372,6 +372,7 @@ class PurgeEventsStore(StateGroupWorkerStore, CacheInvalidationWorkerStore):
             "redactions",
             "rejections",
             "state_events",
+            "event_expiry",
         ):
             logger.info("[purge] removing %s from %s", room_id, table)
 

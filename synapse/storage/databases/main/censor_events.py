@@ -15,6 +15,7 @@
 import logging
 from typing import TYPE_CHECKING, Optional
 
+from synapse.api.errors import NotFoundError
 from synapse.events.utils import prune_event_dict
 from synapse.metrics.background_process_metrics import wrap_as_background_process
 from synapse.storage._base import SQLBaseStore
@@ -165,45 +166,60 @@ class CensorEventsStore(EventsWorkerStore, CacheInvalidationWorkerStore, SQLBase
         Args:
              event_id: The ID of the event to delete.
         """
-        # Try to retrieve the event's content from the database or the event cache.
-        event = await self.get_event(event_id)
+        logger.debug("[expiry_event] expire_event invoked, event_id: %s", event_id)
 
-        def delete_expired_event_txn(txn: LoggingTransaction) -> None:
-            # Delete the expiry timestamp associated with this event from the database.
-            self._delete_event_expiry_txn(txn, event_id)
+        try:
+            # Expire the event if we know about it. This function also deletes the expiry
+            # date from the database in the same database transaction.
+            event = await self.get_event(event_id)
+            logger.debug("[expiry_event] get_event returned something, event_id: %s", event_id)
 
-            if not event:
-                # If we can't find the event, log a warning and delete the expiry date
-                # from the database so that we don't try to expire it again in the
-                # future.
-                logger.warning(
-                    "Can't expire event %s because we don't have it.", event_id
+            def delete_expired_event_txn(txn: LoggingTransaction) -> None:
+                # Delete the expiry timestamp associated with this event from the database.
+                logger.debug("[expiry_event] delete_expired_event_txn invoked, event_id: %s", event_id)
+                self._delete_event_expiry_txn(txn, event_id)
+
+                if not event:
+                    # If we can't find the event, log a warning and delete the expiry date
+                    # from the database so that we don't try to expire it again in the
+                    # future.
+                    logger.warning(
+                        "Can't expire event %s because we don't have it.", event_id
+                    )
+                    return
+
+                # Prune the event's dict then convert it to JSON.
+                pruned_json = json_encoder.encode(
+                    prune_event_dict(event.room_version, event.get_dict())
                 )
-                return
 
-            # Prune the event's dict then convert it to JSON.
-            pruned_json = json_encoder.encode(
-                prune_event_dict(event.room_version, event.get_dict())
+                # Update the event_json table to replace the event's JSON with the pruned
+                # JSON.
+                self._censor_event_txn(txn, event.event_id, pruned_json)
+
+                # We need to invalidate the event cache entry for this event because we
+                # changed its content in the database. We can't call
+                # self._invalidate_cache_and_stream because self.get_event_cache isn't of the
+                # right type.
+                txn.call_after(self._get_event_cache.invalidate, (event.event_id,))
+                # Send that invalidation to replication so that other workers also invalidate
+                # the event cache.
+                self._send_invalidation_to_replication(
+                    txn, "_get_event_cache", (event.event_id,)
+                )
+
+            await self.db_pool.runInteraction(
+                "delete_expired_event", delete_expired_event_txn
             )
+        except NotFoundError as e:
+            logger.debug("Already expired event %s: %r", event_id, e)
 
-            # Update the event_json table to replace the event's JSON with the pruned
-            # JSON.
-            self._censor_event_txn(txn, event.event_id, pruned_json)
+            def just_delete_expiry_txn(txn: LoggingTransaction) -> None:
+                self._delete_event_expiry_txn(txn, event_id)
 
-            # We need to invalidate the event cache entry for this event because we
-            # changed its content in the database. We can't call
-            # self._invalidate_cache_and_stream because self.get_event_cache isn't of the
-            # right type.
-            txn.call_after(self._get_event_cache.invalidate, (event.event_id,))
-            # Send that invalidation to replication so that other workers also invalidate
-            # the event cache.
-            self._send_invalidation_to_replication(
-                txn, "_get_event_cache", (event.event_id,)
+            await self.db_pool.runInteraction(
+                "just_delete_expiry_txn", just_delete_expiry_txn
             )
-
-        await self.db_pool.runInteraction(
-            "delete_expired_event", delete_expired_event_txn
-        )
 
     def _delete_event_expiry_txn(self, txn: LoggingTransaction, event_id: str) -> None:
         """Delete the expiry timestamp associated with an event ID without deleting the
